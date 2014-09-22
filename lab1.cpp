@@ -23,6 +23,7 @@ struct HashArgs
 
 int computeHash (void * arg) 
 {
+	std::cout << "inside cityhash" << std::endl;
 	HashArgs* hashArgs = (HashArgs *) arg; 
         for (uint64_t  i = 0; i < hashArgs->numHashes; ++i) {
             CityHash128(hashArgs->s, hashArgs->len);
@@ -33,6 +34,10 @@ int computeHash (void * arg)
 int main(int argc, char*argv[])
 {
 	int fd = open("/dev/urandom", O_RDONLY);
+	if (fd < 0) {
+	    perror("error reading /dev/urandom");
+	    exit(1);
+  	}
 	char data[4096];
 	read(fd, &data, 4096);
 	close(fd);
@@ -55,20 +60,36 @@ int main(int argc, char*argv[])
         start (numBackground);
 	for (uint64_t i = 0; i < numThreads; ++i) {
 	    void * child_stack = malloc(stackSize);
+	    if (child_stack == 0) {
+		perror("malloc: could not allocate stack");
+		exit(2);
+	    } 
 	    stacks.push_back(child_stack);
 	}
         for (uint64_t i = 0; i < numThreads; ++i) {
   	    int pid; 
-            pid = clone(computeHash, (char *)stacks[i] + stackSize, CLONE_VM, arg);
-            std::cout << "created process " << pid << std::endl;
+            pid = clone(computeHash, (char *)stacks[i] + stackSize, CLONE_VM | SIGCHLD, arg);
+            if (pid == -1) {
+		perror("clone error");
+		exit(3);
+	    }
+	    std::cout << "created process " << pid << std::endl;
 	    pids.push_back(pid);
         }
         for (uint64_t i = 0; i < numThreads; ++i) {
            std::cout << "waiting for process " << pids[i] << std::endl;
-	   waitpid(pids[i], 0, 0);
+	   int pid;
+	   pid = waitpid(pids[i], 0, 0);
+	   if (pid == -1) {
+		perror("waitpid");
+		exit(4);
+	   }
   	}
         std::cout << "stopping background ..." << std::endl;
         stop();
+	for (uint64_t i = 0; i < numThreads; ++i) {
+	    free(stacks[i]);
+	}
         gettimeofday(&tv1, NULL);
         gettimeofday(&tv2, NULL);
         uint64_t tv = (tv2.tv_sec - tv1.tv_sec) * 1000 * 1000 + tv2.tv_usec -tv1.tv_usec;
