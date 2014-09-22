@@ -87,7 +87,7 @@ int main(int argc, char*argv[])
 	    std::cout << "created process " << pid << std::endl;
 	    pids.push_back(pid);
         }
-	//sleep(1); // wait for all LWPs to set up before sending SIG
+	sleep(1); // wait for all LWPs to set up before sending SIG
         gettimeofday(&tv1, NULL);
 	for (uint64_t i = 0; i < numThreads; ++i) {
 	    if (kill(pids[i], SIGCONT) == -1) {
