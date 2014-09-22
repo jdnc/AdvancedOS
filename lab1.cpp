@@ -4,6 +4,7 @@
 # include <sys/wait.h>
 # include <stdio.h>
 # include <unistd.h>
+# include <sched.h>
 # include <fcntl.h>
 # include <iostream>
 # include "src/city.h"
@@ -26,8 +27,12 @@ struct HashArgs
 int computeHash (void * arg) 
 {
 	pause();
-        char tmp[6] = "city\n";
-	//std::cout << "inside cityhash" << std::endl;
+	cpu_set_t set;
+	sched_getaffinity(0, sizeof(cpu_set_t), &set);
+        // char tmp[6] = "city\n";
+       	//for (int i =0; i < CPU_SETSIZE; ++i)
+	//std::cout << "cpu 0 :" << CPU_ISSET(0, &set) << std::endl;
+	//std::cout << "cpu 1 :" << CPU_ISSET(1, &set) << std::endl;
 	//write(STDOUT_FILENO, tmp, 5);
 	HashArgs* hashArgs = (HashArgs *) arg; 
         for (uint64_t  i = 0; i < hashArgs->numHashes; ++i) {
@@ -63,6 +68,7 @@ int main(int argc, char*argv[])
         std::cin >> numHashes;
         std::cin >> numThreads;
         std::cin >> numBackground;
+	cpu_set_t set;
         HashArgs hashArgs;
         hashArgs.s = data;
         hashArgs.len = 4096;
@@ -78,7 +84,7 @@ int main(int argc, char*argv[])
 	    stacks.push_back(child_stack);
 	}
         for (uint64_t i = 0; i < numThreads; ++i) {
-  	    int pid; 
+  	    int pid, ret; 
             pid = clone(computeHash, (char *)stacks[i] + stackSize, CLONE_VM | SIGCHLD, arg);
 	    if (pid == -1) {
 		perror("clone error");
@@ -86,6 +92,11 @@ int main(int argc, char*argv[])
 	    }
 	    std::cout << "created process " << pid << std::endl;
 	    pids.push_back(pid);
+	    CPU_ZERO(&set);
+	    CPU_SET(i, &set);
+	    ret = sched_setaffinity(pid, sizeof(cpu_set_t), &set);
+	    if (ret == -1) 
+		perror("sched_setaffinity");
         }
 	sleep(1); // wait for all LWPs to set up before sending SIG
         gettimeofday(&tv1, NULL);
@@ -96,7 +107,7 @@ int main(int argc, char*argv[])
 	}
         for (uint64_t i = 0; i < numThreads; ++i) {
           // std::cout << "waiting for process " << pids[i] << std::endl;
-	   char tmp[6] = "wait\n";
+	  // char tmp[6] = "wait\n";
 	  // write(STDOUT_FILENO, tmp, 5);
 	   int pid;
 	   pid = waitpid(pids[i], 0, 0);
