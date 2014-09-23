@@ -1,4 +1,5 @@
 # include <sys/time.h>
+# include <sched.h>
 # include <time.h>
 # include <signal.h>
 # include <string.h>
@@ -35,13 +36,22 @@ int computeHash (void * arg)
 {
 	const uint64_t kNano = 1000 * 1000 * 1000;
 	struct timespec startts, endts;
-	clock_gettime(CLOCK_MONOTONIC, &startts);
+	struct sched_param sparam;
+        sparam.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	sched_setscheduler(0, SCHED_FIFO, &sparam);
 	pause();
+	clock_gettime(CLOCK_MONOTONIC, &startts);
+	//pause();
+	//struct sched_param sparam;
+        //sparam.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	//sched_setscheduler(0, SCHED_FIFO, &sparam);
 	//std::cout << "inside cityhash" << std::endl;
 	//write(STDOUT_FILENO, tmp, 5);
 	HashArgs* hashArgs = (HashArgs *) arg; 
         for (uint64_t  i = 0; i < hashArgs->numHashes; ++i) {
-            CityHash128(hashArgs->s, hashArgs->len);
+	    CityHash128(hashArgs->s, hashArgs->len);
+	    if (i % 10 == 0)
+	    sched_yield();
         }
 	clock_gettime(CLOCK_MONOTONIC, &endts);
 	uint64_t totalTime = (endts.tv_sec - startts.tv_sec) * kNano + endts.tv_nsec - startts.tv_nsec;
