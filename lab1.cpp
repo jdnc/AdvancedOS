@@ -5,9 +5,11 @@
 # include <stdio.h>
 # include <unistd.h>
 # include <fcntl.h>
+# include <libcgroup.h>
 # include <iostream>
 # include "src/city.h"
 # include <deque>
+# include <string>
 
 int  computeHash (void * arg); 
 
@@ -26,7 +28,7 @@ struct HashArgs
 int computeHash (void * arg) 
 {
 	pause();
-        char tmp[6] = "city\n";
+        //char tmp[6] = "city\n";
 	//std::cout << "inside cityhash" << std::endl;
 	//write(STDOUT_FILENO, tmp, 5);
 	HashArgs* hashArgs = (HashArgs *) arg; 
@@ -43,6 +45,14 @@ void sigHandler(int sigNo)
 
 int main(int argc, char*argv[])
 {
+	std::string configFile = "/etc/cgconfig.conf";
+	cgroup_init();
+	cgroup_config_load_config(configFile.c_str());
+	struct cgroup* hipri = cgroup_new_cgroup("hipri");
+	struct cgroup* lopri = cgroup_new_cgroup("lopri");
+	cgroup_get_cgroup(hipri);
+	cgroup_get_cgroup(lopri);
+	cgroup_attach_task(lopri);
 	signal(SIGCONT, sigHandler);
 	int fd = open("/dev/urandom", O_RDONLY);
 	if (fd < 0) {
@@ -90,13 +100,14 @@ int main(int argc, char*argv[])
 	sleep(1); // wait for all LWPs to set up before sending SIG
         gettimeofday(&tv1, NULL);
 	for (uint64_t i = 0; i < numThreads; ++i) {
+	    cgroup_attach_task_pid(hipri, pids[i]);
 	    if (kill(pids[i], SIGCONT) == -1) {
 		printf("failed to start process %d\n", pids[i]);
 	    }
 	}
         for (uint64_t i = 0; i < numThreads; ++i) {
           // std::cout << "waiting for process " << pids[i] << std::endl;
-	   char tmp[6] = "wait\n";
+	  // char tmp[6] = "wait\n";
 	  // write(STDOUT_FILENO, tmp, 5);
 	   int pid;
 	   pid = waitpid(pids[i], 0, 0);
