@@ -1,3 +1,4 @@
+#include <getopt.h>
 # include <sys/time.h>
 # include <sched.h>
 # include <time.h>
@@ -11,6 +12,19 @@
 # include <iostream>
 # include "src/city.h"
 # include <deque>
+using namespace std;
+
+static void usageAndExit(const char* const executable, const int exitValue)
+{
+    ((exitValue == EXIT_SUCCESS) ? cout : cerr)
+        << "Usage: " << executable << " [options]\n"
+        << " -t --hash-threads        number of hashing processes\n"
+        << " -b --background          number of background processes\n"
+        << " -h --help                print this help message\n"
+        << " -n --num-hashes          number of hashes\n"
+        << endl;
+    exit(exitValue);
+}
 
 int  computeHash (void * arg); 
 
@@ -37,7 +51,7 @@ int computeHash (void * arg)
 	const uint64_t kNano = 1000 * 1000 * 1000;
 	struct timespec startts, endts;
 	struct sched_param sparam;
-        sparam.sched_priority = sched_get_priority_max(SCHED_FIFO);
+        sparam.sched_priority = 99;//sched_get_priority_max(SCHED_FIFO);
 	sched_setscheduler(0, SCHED_FIFO, &sparam);
 	pause();
 	clock_gettime(CLOCK_MONOTONIC, &startts);
@@ -50,8 +64,8 @@ int computeHash (void * arg)
 	HashArgs* hashArgs = (HashArgs *) arg; 
         for (uint64_t  i = 0; i < hashArgs->numHashes; ++i) {
 	    CityHash128(hashArgs->s, hashArgs->len);
-	    if (i % 10 == 0)
-	    sched_yield();
+	    if (i % (hashArgs->numHashes/1000) == 0)
+	        sched_yield();
         }
 	clock_gettime(CLOCK_MONOTONIC, &endts);
 	uint64_t totalTime = (endts.tv_sec - startts.tv_sec) * kNano + endts.tv_nsec - startts.tv_nsec;
@@ -66,6 +80,41 @@ void sigHandler(int sigNo)
 
 int main(int argc, char*argv[])
 {
+    uint64_t numHashes;
+    uint64_t numThreads;
+    uint64_t numBackground;
+    struct option longOptions[] = {
+        {"hash-threads", required_argument, 0, 't'},
+        {"background", required_argument, 0, 'b'},
+        {"num-hashes", required_argument, 0, 'n'},
+        {"help", no_argument, 0, 'h'},
+        {0, 0, 0, 0}
+    };
+
+    const char* executable = basename(argv[0]);
+    int c;
+    while ((c = getopt_long(argc, argv, "b:t:n:h:", longOptions, nullptr)) != -1)
+    {
+        switch(c) {
+        case 'b':
+            numBackground = strtoul(optarg, NULL, 0);
+            break;
+        case 't':
+            numThreads = strtoul(optarg, NULL, 0);
+            break;
+        case 'h':
+            usageAndExit(executable, EXIT_SUCCESS);
+            break;
+        case 'n':
+            numHashes = strtoul(optarg, NULL, 0);
+            break;
+        default:
+            usageAndExit(executable, EXIT_FAILURE);
+	    break;
+        }
+    }
+
+
 	signal(SIGCONT, sigHandler);
 	int fd = open("/dev/urandom", O_RDONLY);
 	if (fd < 0) {
@@ -79,14 +128,7 @@ int main(int argc, char*argv[])
 	std::deque<HashArgs> argsList;
 	std::deque<void *> stacks;
         struct timeval tv1, tv2;
-        uint64_t numHashes;
-        uint64_t numThreads;
-        uint64_t numBackground;
 	const size_t stackSize = 16384;
-        std::cout << "numHashes numThreads numBg" << std::endl;
-        std::cin >> numHashes;
-        std::cin >> numThreads;
-        std::cin >> numBackground;
         start (numBackground);
 	for (uint64_t i = 0; i < numThreads; ++i) {
 	    void * child_stack = malloc(stackSize);
