@@ -1,3 +1,4 @@
+#include <getopt.h>
 # include <sys/time.h>
 # include <time.h>
 # include <signal.h>
@@ -12,7 +13,19 @@
 # include <deque>
 # include <string.h>
 # include <string>
+using namespace std;
 
+static void usageAndExit(const char* const executable, const int exitValue)
+{
+    ((exitValue == EXIT_SUCCESS) ? cout : cerr)
+        << "Usage: " << executable << " [options]\n"
+        << " -t --hash-threads        number of hashing processes\n"
+        << " -b --background          number of background processes\n"
+        << " -h --help                print this help message\n"
+        << " -n --num-hashes          number of hashes\n"
+        << endl;
+    exit(exitValue);
+}
 int  computeHash (void * arg); 
 
 extern "C" 
@@ -53,6 +66,40 @@ void sigHandler(int sigNo)
 
 int main(int argc, char*argv[])
 {
+    uint64_t numHashes;
+    uint64_t numThreads;
+    uint64_t numBackground;
+    struct option longOptions[] = {
+        {"hash-threads", required_argument, 0, 't'},
+        {"background", required_argument, 0, 'b'},
+        {"num-hashes", required_argument, 0, 'n'},
+        {"help", no_argument, 0, 'h'},
+        {0, 0, 0, 0}
+    };
+
+    const char* executable = basename(argv[0]);
+    int c;
+    while ((c = getopt_long(argc, argv, "b:t:n:h:", longOptions, nullptr)) != -1)
+    {
+        switch(c) {
+        case 'b':
+            numBackground = strtoul(optarg, NULL, 0);
+            break;
+        case 't':
+            numThreads = strtoul(optarg, NULL, 0);
+            break;
+        case 'h':
+            usageAndExit(executable, EXIT_SUCCESS);
+            break;
+        case 'n':
+            numHashes = strtoul(optarg, NULL, 0);
+            break;
+        default:
+            usageAndExit(executable, EXIT_FAILURE);
+	    break;
+        }
+    }
+
 	std::string configFile = "/etc/cgconfig.conf";
 	cgroup_init();
 	cgroup_config_load_config(configFile.c_str());
@@ -74,14 +121,7 @@ int main(int argc, char*argv[])
 	std::deque<void *> stacks;
 	std::deque<HashArgs> argsList;
         struct timespec tv1, tv2;
-        uint64_t numHashes;
-        uint64_t numThreads;
-        uint64_t numBackground;
 	const size_t stackSize = 16384;
-        std::cout << "numHashes numThreads numBg" << std::endl;
-        std::cin >> numHashes;
-        std::cin >> numThreads;
-        std::cin >> numBackground;
         start (numBackground);
 	for (uint64_t i = 0; i < numThreads; ++i) {
 	    void * child_stack = malloc(stackSize);
